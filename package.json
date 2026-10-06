@@ -1,0 +1,43 @@
+{
+  "name": "@mockmarlin/mock-engine",
+  "version": "0.1.0",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "description": "Fastify plugin that serves mock REST, streaming, GraphQL, MCP, and gRPC-Web responses for a workspace from Redis or a static in-memory snapshot",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run --coverage",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@fastify/websocket": "^11.3.1",
+    "@graphql-tools/mock": "^9.1.14",
+    "@graphql-tools/schema": "^10.1.1",
+    "@grpc/grpc-js": "^1.14.5",
+    "@grpc/proto-loader": "^0.8.1",
+    "fastify": "^5.6.1",
+    "fastify-plugin": "^6.0.0",
+    "graphql": "^17.0.2",
+    "ioredis": "^5.8.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.5.2",
+    "@vitest/coverage-v8": "^5.0.2",
+    "ioredis-mock": "^8.13.1",
+    "typescript": "^5.9.2",
+    "vitest": "^5.0.2"
+  }
+}
