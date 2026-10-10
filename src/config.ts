@@ -11,7 +11,7 @@ import type { KeyTtlSeconds, MockEngineOptions, ProtocolSwitches } from "./types
 /** Options that both the HTTP plugin and the WebSocket handshake read. */
 export type MockEngineSharedOptions = Pick<
   MockEngineOptions,
-  "mode" | "redis" | "data" | "resolveWorkspaceId" | "basePath" | "keyPrefix" | "keys" | "ttl" | "protocols"
+  "store" | "resolveWorkspaceId" | "basePath" | "keyPrefix" | "keys" | "ttl" | "protocols"
 >;
 
 /** Settings after defaults are filled in. Handlers read this, not the raw options. */
@@ -20,6 +20,7 @@ export interface ResolvedEngineConfig {
   keys: KeyLayout;
   protocols: ProtocolSwitches;
   ttl: KeyTtlSeconds;
+  matchParams: boolean;
 }
 
 /**
@@ -27,7 +28,7 @@ export interface ResolvedEngineConfig {
  * Omitted protocol switches stay enabled. Omitted TTLs stay unset.
  */
 export function resolveEngineConfig(
-  options: Pick<MockEngineOptions, "basePath" | "keyPrefix" | "keys" | "ttl" | "protocols">,
+  options: Pick<MockEngineOptions, "basePath" | "keyPrefix" | "keys" | "ttl" | "protocols" | "matchParams">,
 ): ResolvedEngineConfig {
   const protocols = options.protocols;
   return {
@@ -41,5 +42,6 @@ export function resolveEngineConfig(
       grpc: protocols?.grpc ?? true,
     },
     ttl: options.ttl ?? {},
+    matchParams: options.matchParams === true,
   };
 }

@@ -6,19 +6,42 @@
   "engines": {
     "node": ">=24"
   },
-  "description": "Fastify plugin that serves mock REST, streaming, GraphQL, MCP, and gRPC-Web responses for a workspace from Redis or a static in-memory snapshot",
+  "description": "Mock REST, streaming, GraphQL, MCP, and gRPC from memory or Redis, as a Fastify plugin or a local server",
+  "keywords": [
+    "mock",
+    "mock-server",
+    "rest",
+    "graphql",
+    "grpc",
+    "mcp",
+    "openapi",
+    "cli"
+  ],
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "CONTRIBUTING.md",
+    ".env.example",
+    "docs",
+    "examples/mock-engine.yaml",
+    "examples/demo.proto"
   ],
+  "bin": {
+    "mock-engine": "./dist/cli.js"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./redis": {
+      "types": "./dist/redis-store.d.ts",
+      "default": "./dist/redis-store.js"
     }
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "install-cli": "npm run build && npm install -g .",
     "test": "vitest run --coverage",
     "lint": "tsc --noEmit"
   },
@@ -31,10 +54,19 @@
     "fastify": "^5.6.1",
     "fastify-plugin": "^6.0.0",
     "graphql": "^17.0.2",
+    "js-yaml": "^5.4.2"
+  },
+  "peerDependencies": {
     "ioredis": "^5.8.1"
+  },
+  "peerDependenciesMeta": {
+    "ioredis": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@types/node": "^24.5.2",
+    "ioredis": "^5.8.1",
     "@vitest/coverage-v8": "^5.0.2",
     "ioredis-mock": "^8.13.1",
     "typescript": "^5.9.2",

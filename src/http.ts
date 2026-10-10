@@ -6,7 +6,7 @@
 
 import type { FastifyReply, FastifyRequest } from "fastify";
 
-import type { Redis } from "ioredis";
+import type { MockStore } from "./store.js";
 
 const ROUTE_PATH_PATTERN = /^\/(?:[A-Za-z0-9._~-]+(?:\/[A-Za-z0-9._~-]+)*)?$/;
 const MAX_ROUTE_PATH_LENGTH = 256;
@@ -95,27 +95,27 @@ export function activeTtl(seconds: number | undefined): number | undefined {
  * Read one key. When `ttlSeconds` is a positive number and the key exists,
  * set its expiry to that many seconds. A missing key is left alone.
  */
-export async function readRedisValue(
-  redis: Redis,
+export async function readStoreValue(
+  store: MockStore,
   key: string,
   ttlSeconds: number | undefined,
 ): Promise<string | null> {
-  const value = await redis.get(key);
+  const value = await store.get(key);
   const ttl = activeTtl(ttlSeconds);
   if (value !== null && ttl !== undefined) {
-    await redis.expire(key, ttl);
+    await store.expire(key, ttl);
   }
   return value;
 }
 
-export async function redisGet(
-  store: { get(key: string, ttlSeconds: number | undefined): Promise<string | null> },
+export async function storeGet(
+  store: MockStore,
   key: string,
   reply: FastifyReply,
   ttlSeconds?: number | undefined,
 ): Promise<string | null | "down"> {
   try {
-    return await store.get(key, ttlSeconds);
+    return await readStoreValue(store, key, ttlSeconds);
   } catch {
     await reply.status(503).send({
       error: "Service Unavailable",

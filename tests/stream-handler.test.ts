@@ -10,6 +10,7 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 
 import { StreamHandler } from "../src/handlers/StreamHandler.js";
 import type { EngineSocket, RequestContext } from "../src/types.js";
+import { toStore } from "../src/store.js";
 import { createRedis, resolveWorkspaceId, WORKSPACE_ID } from "./support.js";
 
 afterEach(() => {
@@ -180,7 +181,7 @@ function context(): RequestContext {
 
 function handler(extra: { throwLog?: boolean; throwOverride?: boolean } = {}): StreamHandler {
   return new StreamHandler({
-    redis: createRedis(),
+    store: toStore(createRedis()),
     resolveWorkspaceId,
     ...(extra.throwLog
       ? {

@@ -7,10 +7,10 @@
 import type { ServerResponse } from "node:http";
 
 import type { FastifyReply, FastifyRequest } from "fastify";
-import type { Redis } from "ioredis";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { GrpcHandler } from "../src/handlers/GrpcHandler.js";
+import { toStore } from "../src/store.js";
 import { grpcHotKey } from "../src/keys.js";
 import { SessionManager } from "../src/mcp/SessionManager.js";
 import { createRedis, resolveWorkspaceId, WORKSPACE_ID } from "./support.js";
@@ -26,7 +26,7 @@ describe("handler edges", () => {
       grpcHotKey(WORKSPACE_ID, "demo.Greeter", "SayHello"),
       JSON.stringify({ responsePayload: { message: "hi" }, latencyMs: 0, errorCode: "OK" }),
     );
-    const handler = new GrpcHandler({ redis, resolveWorkspaceId });
+    const handler = new GrpcHandler({ store: toStore(redis), resolveWorkspaceId });
     let wrote = false;
     const request = {
       headers: { "content-type": "application/grpc" },
@@ -56,11 +56,11 @@ describe("handler edges", () => {
     expect(wrote).toBe(false);
 
     const down = new GrpcHandler({
-      redis: {
+      store: toStore({
         async get(): Promise<string> {
           throw new Error("down");
         },
-      } as unknown as Redis,
+      }),
       resolveWorkspaceId,
     });
     let statusCode = 0;

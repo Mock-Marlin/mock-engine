@@ -1,0 +1,46 @@
+# Sample spec. Paths are relative to this file.
+# mock-engine --config examples/mock-engine.yaml
+version: 1
+workspace: shop
+
+mocks:
+  - kind: rest
+    method: GET
+    path: /health
+    status: 200
+    body:
+      ok: true
+
+  - kind: sse
+    path: /events
+    body: hello from sse
+
+  - kind: websocket
+    path: /ws
+    body: hello from websocket
+
+  - kind: chunked
+    path: /chunked
+    body: hello from chunked
+
+  - kind: graphql
+    path: /graphql
+    sdl: |
+      type Query { hello: String }
+
+  - kind: mcp
+    tools:
+      - name: echo
+        description: Echoes arguments
+        body:
+          ok: true
+
+  - kind: grpc
+    service: demo.Greeter
+    rpc: SayHello
+    body:
+      message: hello
+
+protos:
+  - name: demo.proto
+    file: ./demo.proto

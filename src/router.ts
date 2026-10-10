@@ -20,12 +20,13 @@ import {
   isRecord,
   isValidRoutePath,
   queryRecord,
-  redisGet,
+  readStoreValue,
   remainingPath,
   sendNotFound,
+  storeGet,
   stringHeaders,
 } from "./http.js";
-import { openDocumentStore } from "./store.js";
+import { matchRouteIndex, readRouteIndex } from "./import/write.js";
 import { normalizeStreamDocument } from "./stream/plan.js";
 import { GRAPHQL_TRANSPORT_WS_PROTOCOL } from "./graphql/ws.js";
 import type { EngineSocket, MockEngineOptions, RequestContext } from "./types.js";
@@ -111,9 +112,23 @@ function targetFromUrl(
   return { workspaceKey, path: path.startsWith("/") ? path : `/${path}` };
 }
 
+async function indexedMockId(
+  options: MockEngineOptions,
+  workspaceId: string,
+  method: string,
+  path: string,
+  reply: FastifyReply,
+): Promise<string | null | "down"> {
+  const settings = resolveEngineConfig(options);
+  const raw = await storeGet(options.store, settings.keys.routeIndex(workspaceId), reply);
+  if (raw === "down") {
+    return "down";
+  }
+  return matchRouteIndex(readRouteIndex(raw), method, path);
+}
+
 export function mockEngineWebsocketOptions(options: MockEngineSharedOptions): WebsocketHandshake {
   const settings = resolveEngineConfig(options);
-  const store = openDocumentStore(options);
   const selectedSubprotocol = new WeakMap<IncomingMessage, string | false>();
 
   async function decide(req: IncomingMessage): Promise<string | false | "reject"> {
@@ -127,7 +142,8 @@ export function mockEngineWebsocketOptions(options: MockEngineSharedOptions): We
     }
     const offered = offeredProtocols(req.headers["sec-websocket-protocol"]);
     if (settings.protocols.graphql) {
-      const graphqlRaw = await store.get(
+      const graphqlRaw = await readStoreValue(
+        options.store,
         settings.keys.graphql(workspaceId, target.path),
         settings.ttl.graphql,
       );
@@ -138,7 +154,8 @@ export function mockEngineWebsocketOptions(options: MockEngineSharedOptions): We
     if (!settings.protocols.stream) {
       return false;
     }
-    const streamRaw = await store.get(
+    const streamRaw = await readStoreValue(
+      options.store,
       settings.keys.stream(workspaceId, target.path),
       settings.ttl.stream,
     );
@@ -188,12 +205,11 @@ export function createDispatcher(options: MockEngineOptions): {
   socket: (socket: EngineSocket, request: FastifyRequest) => Promise<void>;
 } {
   const settings = resolveEngineConfig(options);
-  const store = openDocumentStore(options);
   const rest = new RestHandler(options);
   const streams = new StreamHandler(options);
   const graphql = new GraphqlHandler(options);
-  const mcp = new McpHandler(options, store);
-  const grpc = new GrpcHandler(options, store);
+  const mcp = new McpHandler(options);
+  const grpc = new GrpcHandler(options);
 
   async function http(request: FastifyRequest, reply: FastifyReply): Promise<void> {
     if (request.method === "OPTIONS") {
@@ -246,8 +262,8 @@ export function createDispatcher(options: MockEngineOptions): {
 
     const accept = headerText(request.headers.accept);
     if (settings.protocols.stream) {
-      const streamRaw = await redisGet(
-        store,
+      const streamRaw = await storeGet(
+        options.store,
         settings.keys.stream(workspaceId, path),
         reply,
         settings.ttl.stream,
@@ -262,8 +278,8 @@ export function createDispatcher(options: MockEngineOptions): {
     }
 
     if (settings.protocols.graphql) {
-      const graphqlRaw = await redisGet(
-        store,
+      const graphqlRaw = await storeGet(
+        options.store,
         settings.keys.graphql(workspaceId, path),
         reply,
         settings.ttl.graphql,
@@ -282,8 +298,8 @@ export function createDispatcher(options: MockEngineOptions): {
       return;
     }
 
-    const mockId = await redisGet(
-      store,
+    let mockId = await storeGet(
+      options.store,
       settings.keys.route(workspaceId, request.method, path),
       reply,
       settings.ttl.route,
@@ -291,11 +307,18 @@ export function createDispatcher(options: MockEngineOptions): {
     if (mockId === "down") {
       return;
     }
+    if ((mockId === null || mockId.length === 0) && settings.matchParams) {
+      const indexed = await indexedMockId(options, workspaceId, request.method, path, reply);
+      if (indexed === "down") {
+        return;
+      }
+      mockId = indexed;
+    }
     if (mockId === null || mockId.length === 0) {
       await sendNotFound(reply, "Mock endpoint not found or expired");
       return;
     }
-    const mockRaw = await redisGet(store, settings.keys.mock(mockId), reply, settings.ttl.mock);
+    const mockRaw = await storeGet(options.store, settings.keys.mock(mockId), reply, settings.ttl.mock);
     if (mockRaw === "down") {
       return;
     }
@@ -331,7 +354,8 @@ export function createDispatcher(options: MockEngineOptions): {
       let graphqlRaw: string | null = null;
       if (settings.protocols.graphql) {
         try {
-          graphqlRaw = await store.get(
+          graphqlRaw = await readStoreValue(
+            options.store,
             settings.keys.graphql(workspaceId, path),
             settings.ttl.graphql,
           );
@@ -348,7 +372,8 @@ export function createDispatcher(options: MockEngineOptions): {
       if (settings.protocols.stream) {
         let streamRaw: string | null = null;
         try {
-          streamRaw = await store.get(
+          streamRaw = await readStoreValue(
+            options.store,
             settings.keys.stream(workspaceId, path),
             settings.ttl.stream,
           );

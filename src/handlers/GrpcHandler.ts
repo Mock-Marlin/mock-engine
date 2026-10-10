@@ -13,8 +13,7 @@ import * as protoLoader from "@grpc/proto-loader";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
 import { resolveEngineConfig } from "../config.js";
-import { delay, headerText, isRecord, redisGet } from "../http.js";
-import { openDocumentStore, type MockDocumentStore } from "../store.js";
+import { delay, headerText, isRecord, storeGet } from "../http.js";
 import type { MockEngineOptions } from "../types.js";
 
 interface ProtoFile {
@@ -186,11 +185,9 @@ async function loadMethods(files: readonly ProtoFile[]): Promise<LoadedMethod[]>
 
 export class GrpcHandler {
   private readonly options: MockEngineOptions;
-  private readonly store: MockDocumentStore;
 
-  constructor(options: MockEngineOptions, store: MockDocumentStore = openDocumentStore(options)) {
+  constructor(options: MockEngineOptions) {
     this.options = options;
-    this.store = store;
   }
 
   async handle(request: FastifyRequest, reply: FastifyReply, workspaceId: string, routePath: string): Promise<void> {
@@ -201,8 +198,8 @@ export class GrpcHandler {
     }
 
     const settings = resolveEngineConfig(this.options);
-    const raw = await redisGet(
-      this.store,
+    const raw = await storeGet(
+      this.options.store,
       settings.keys.grpc(workspaceId, parsed.service, parsed.method),
       reply,
       settings.ttl.grpc,
@@ -269,7 +266,7 @@ export class GrpcHandler {
   ): Promise<LoadedMethod | null | "down"> {
     const settings = resolveEngineConfig(this.options);
     const schemaKey = settings.keys.grpcSchema(workspaceId);
-    const raw = await redisGet(this.store, schemaKey, reply, settings.ttl.grpcSchema);
+    const raw = await storeGet(this.options.store, schemaKey, reply, settings.ttl.grpcSchema);
     if (raw === "down") {
       return "down";
     }

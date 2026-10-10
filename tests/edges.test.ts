@@ -11,6 +11,7 @@ import type { Redis } from "ioredis";
 import { describe, expect, it } from "vitest";
 
 import { graphqlKey, mcpKey, mockKey, routeKey, streamKey } from "../src/keys.js";
+import { toStore } from "../src/store.js";
 import { createDispatcher, mockEngineWebsocketOptions } from "../src/router.js";
 import { createApp, listen, resolveWorkspaceId, WORKSPACE_ID, wsUpgrade } from "./support.js";
 
@@ -42,7 +43,7 @@ function redisGet(impl: (key: string) => Promise<string | null>): Redis {
 describe("router edges", () => {
   it("rejects a missing workspace, an unknown method, and a store that fails mid-lookup", async () => {
     const quiet = createDispatcher({
-      redis: redisGet(async () => null),
+      store: toStore(redisGet(async () => null)),
       resolveWorkspaceId,
     });
     const missing = captureReply();
@@ -54,12 +55,12 @@ describe("router edges", () => {
     expect(traced.status()).toBe(404);
 
     const graphqlDown = createDispatcher({
-      redis: redisGet(async (key) => {
+      store: toStore(redisGet(async (key) => {
         if (key.includes(":graphql:")) {
           throw new Error("down");
         }
         return null;
-      }),
+      })),
       resolveWorkspaceId,
     });
     const graphqlReply = captureReply();
@@ -67,12 +68,12 @@ describe("router edges", () => {
     expect(graphqlReply.status()).toBe(503);
 
     const routeDown = createDispatcher({
-      redis: redisGet(async (key) => {
+      store: toStore(redisGet(async (key) => {
         if (key.includes(":route:")) {
           throw new Error("down");
         }
         return null;
-      }),
+      })),
       resolveWorkspaceId,
     });
     const routeReply = captureReply();
@@ -80,7 +81,7 @@ describe("router edges", () => {
     expect(routeReply.status()).toBe(503);
 
     const mockDown = createDispatcher({
-      redis: redisGet(async (key) => {
+      store: toStore(redisGet(async (key) => {
         if (key.includes(":mock:")) {
           throw new Error("down");
         }
@@ -88,7 +89,7 @@ describe("router edges", () => {
           return "mock-1";
         }
         return null;
-      }),
+      })),
       resolveWorkspaceId,
     });
     const mockReply = captureReply();
@@ -103,7 +104,7 @@ describe("router edges", () => {
       }
       return null;
     });
-    const handshake = mockEngineWebsocketOptions({ redis, resolveWorkspaceId, basePath: "/s" });
+    const handshake = mockEngineWebsocketOptions({ store: toStore(redis), resolveWorkspaceId, basePath: "/s" });
     const decide = async (url: string | undefined, protocol?: string | string[]): Promise<boolean> => {
       const req = { url, headers: { "sec-websocket-protocol": protocol } } as IncomingMessage;
       return new Promise((resolve) => {
@@ -129,9 +130,9 @@ describe("router edges", () => {
     expect(handshake.handleProtocols(new Set(["chat"]), chatRequest)).toBe("chat");
 
     const failing = mockEngineWebsocketOptions({
-      redis: redisGet(async () => {
+      store: toStore(redisGet(async () => {
         throw new Error("down");
-      }),
+      })),
       resolveWorkspaceId,
       basePath: "/s",
     });
@@ -511,12 +512,12 @@ describe("remaining protocol gaps", () => {
   it("closes a GraphQL socket when Redis fails and skips a gRPC write when the schema store is down", async () => {
     const codes: number[] = [];
     const dispatch = createDispatcher({
-      redis: redisGet(async (key) => {
+      store: toStore(redisGet(async (key) => {
         if (key.includes(":graphql:")) {
           throw new Error("down");
         }
         return null;
-      }),
+      })),
       resolveWorkspaceId,
     });
     await dispatch.socket(

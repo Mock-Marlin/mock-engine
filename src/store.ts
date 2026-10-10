@@ -4,76 +4,100 @@
  * SPDX-License-Identifier: MIT
  */
 
-import type { Redis } from "ioredis";
-
-import { readRedisValue } from "./http.js";
-
-/**
- * Read-only mock documents. Redis refreshes expiry when a TTL is set.
- * The memory store ignores TTL and returns the snapshot copied at startup.
- */
-export interface MockDocumentStore {
-  get(key: string, ttlSeconds: number | undefined): Promise<string | null>;
+/** Key-value store the engine reads. `list` is optional and returns keys that start with a prefix. */
+export interface MockStore {
+  get(key: string): Promise<string | null>;
+  set(key: string, value: string): Promise<void>;
+  expire(key: string, seconds: number): Promise<void>;
+  del(key: string): Promise<void>;
+  list?(prefix: string): Promise<string[]>;
 }
 
-/** The store fields on the plugin options. Other fields are ignored. */
-export interface DocumentStoreOptions {
-  mode?: "redis" | "memory" | undefined;
-  redis?: Redis | undefined;
-  data?: Readonly<Record<string, string>> | undefined;
+interface MemoryEntry {
+  value: string;
+  expiresAt: number | null;
 }
 
-/**
- * Open the store selected by `mode`. Memory copies `data` immediately.
- * Redis keeps the caller's client and does not connect on its own.
- */
-export function openDocumentStore(options: DocumentStoreOptions): MockDocumentStore {
-  if (options.mode === "memory") {
-    return memoryStore(options.data);
-  }
-  if (options.mode !== undefined && options.mode !== "redis") {
-    throw new Error('mock-engine mode must be "redis" or "memory"');
-  }
-  if (options.redis === undefined) {
-    throw new Error("mock-engine redis mode requires redis");
-  }
-  return redisStore(options.redis);
-}
+/** Process-local store. Keys disappear when the process exits. */
+export function createMemoryStore(): MockStore {
+  const records = new Map<string, MemoryEntry>();
 
-function redisStore(redis: Redis): MockDocumentStore {
-  return {
-    get(key, ttlSeconds) {
-      return readRedisValue(redis, key, ttlSeconds);
-    },
-  };
-}
-
-function memoryStore(data: Readonly<Record<string, string>> | undefined): MockDocumentStore {
-  const record = plainRecord(data);
-  if (record === null) {
-    throw new Error("mock-engine memory mode requires data");
-  }
-  const entries = new Map<string, string>();
-  for (const [key, value] of Object.entries(record)) {
-    if (typeof value !== "string") {
-      throw new Error(`mock-engine memory data values must be strings (${key})`);
+  function live(key: string): MemoryEntry | undefined {
+    const entry = records.get(key);
+    if (entry === undefined) {
+      return undefined;
     }
-    entries.set(key, value);
+    if (entry.expiresAt !== null && entry.expiresAt <= Date.now()) {
+      records.delete(key);
+      return undefined;
+    }
+    return entry;
   }
+
   return {
     async get(key) {
-      return entries.get(key) ?? null;
+      return live(key)?.value ?? null;
+    },
+    async set(key, value) {
+      records.set(key, { value, expiresAt: null });
+    },
+    async expire(key, seconds) {
+      const entry = live(key);
+      if (entry === undefined) {
+        return;
+      }
+      entry.expiresAt = Date.now() + seconds * 1000;
+    },
+    async del(key) {
+      records.delete(key);
+    },
+    async list(prefix) {
+      const keys: string[] = [];
+      for (const key of records.keys()) {
+        if (live(key) !== undefined && key.startsWith(prefix)) {
+          keys.push(key);
+        }
+      }
+      return keys;
     },
   };
 }
 
-function plainRecord(value: unknown): Record<string, unknown> | null {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) {
-    return null;
+/**
+ * Wrap a client that already speaks get/set/expire/del, including ioredis.
+ * `list` is added when the client has `keys`.
+ */
+export function toStore(client: unknown): MockStore {
+  if (!isClient(client)) {
+    throw new TypeError("Store client must implement get");
   }
-  const prototype: unknown = Object.getPrototypeOf(value);
-  if (prototype !== Object.prototype && prototype !== null) {
-    return null;
+  const store: MockStore = {
+    get: (key) => client.get(key),
+    set: async (key, value) => {
+      await client.set?.(key, value);
+    },
+    expire: async (key, seconds) => {
+      await client.expire?.(key, seconds);
+    },
+    del: async (key) => {
+      await client.del?.(key);
+    },
+  };
+  if (client.keys !== undefined) {
+    const keys = client.keys;
+    store.list = (prefix) => keys(`${prefix}*`);
   }
-  return value as Record<string, unknown>;
+  return store;
+}
+
+interface StoreClient {
+  get(key: string): Promise<string | null>;
+  set?(key: string, value: string): Promise<unknown>;
+  expire?(key: string, seconds: number): Promise<unknown>;
+  del?(key: string): Promise<unknown>;
+  keys?(pattern: string): Promise<string[]>;
+}
+
+function isClient(value: unknown): value is StoreClient {
+  return typeof value === "object" && value !== null && typeof (value as { get?: unknown }).get === "function";
 }

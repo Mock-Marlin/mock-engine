@@ -1,7 +1,13 @@
 node_modules/
 dist/
+dist.root-owned/
 coverage/
 scripts/
+.tmp-tools/
+.tmp-prefix/
+.tmp-pack/
+/mock-engine.yaml
+/mock-engine.yml
 *.tsbuildinfo
 *.log
 .env

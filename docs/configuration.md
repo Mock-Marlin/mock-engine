@@ -1,28 +1,24 @@
 # Configuration
 
-Every field on the object you pass to `mockEngine` and `mockEngineWebsocketOptions`. Pass the same mode, store, URL, key, TTL, and protocol fields to both.
+Every field on the object you pass to `mockEngine` and `mockEngineWebsocketOptions`. Pass the same URL, key, TTL, and protocol fields to both.
 
-## `mode`
+## `store`
 
-Optional. `"redis"` or `"memory"`. Omitted means `"redis"`.
+Required `MockStore`. The plugin calls `get`, and `expire` only when a TTL is configured and the key exists. It does not construct a store and does not close one you passed in.
 
-`"redis"` reads the `redis` client. `"memory"` reads `data` and does not open a connection. Pass one store, not both.
+`createMemoryStore()` is a `Map` in the process. Keys last until the process exits, or until `expire` says they are due. `openRedisStore(url)` from `@mockmarlin/mock-engine/redis` connects with the optional `ioredis` peer and returns `{ store, close }`. An existing client with `get`, `set`, `expire`, and `del` can be passed directly.
 
-## `redis`
+## `matchParams`
 
-Required when `mode` is `"redis"` or omitted. An `ioredis` client you create. The plugin does not construct one and does not call `quit`. It calls `GET`, and `EXPIRE` only when a TTL is configured and the key exists.
+Optional. Default `false`.
 
-## `data`
-
-Required when `mode` is `"memory"`. A `Record<string, string>` whose keys and values are the same strings Redis would hold. See [redis.md](redis.md).
-
-The plugin and the WebSocket handshake each copy the map when they open. Later edits to your object do not change a running server. A value that is not a string throws at startup. An empty map is valid, and every lookup is a miss. `ttl` is ignored.
+REST lookup tries the exact route key first. When this is `true` and that key misses, the plugin reads `keys.routeIndex(workspaceId)` and matches a stored pattern such as `/users/:id` against the request path. `serve()` sets this so imported OpenAPI and Postman paths match. Leave it off when every public path is stored as its own key.
 
 ## `resolveWorkspaceId`
 
 Required `(workspaceKey: string) => Promise<string | null>`.
 
-`workspaceKey` is the first path segment after `basePath`. It is whatever you put in the URL: a slug, a uuid, or any other single segment. Return the id that your document keys use. Return `null` when that workspace should not be served. The plugin then responds 404 and does not read the store.
+`workspaceKey` is the first path segment after `basePath`. It is whatever you put in the URL: a slug, a uuid, or any other single segment. Return the id that your store keys use. Return `null` when that workspace should not be served. The plugin then responds 404 and does not read the store.
 
 The returned string is `RequestContext.workspaceId`. Handlers do not interpret it.
 
@@ -60,7 +56,8 @@ Used only when `keys` is omitted. The prefix is trimmed, and a trailing colon is
 
 | Kind | Key |
 |---|---|
-| REST route index | `widgets:route:{workspaceId}:{METHOD}:{path}` |
+| REST route | `widgets:route:{workspaceId}:{METHOD}:{path}` |
+| REST route index | `widgets:route-index:{workspaceId}` |
 | REST document | `widgets:mock:{id}` |
 | Stream | `widgets:stream:{workspaceId}:{path}` |
 | GraphQL | `widgets:graphql:{workspaceId}:{path}` |
@@ -70,7 +67,9 @@ Used only when `keys` is omitted. The prefix is trimmed, and a trailing colon is
 
 `{METHOD}` is the Fastify method, such as `GET`. `{path}` includes the leading slash, such as `/hello`.
 
-The same functions are exported one by one (`routeKey`, `mockKey`, `streamKey`, `graphqlKey`, `mcpKey`, `grpcHotKey`, `grpcSchemaKey`). Each takes an optional prefix as its last argument. Omit it and the prefix is `mockmarlin`.
+The route index is a JSON array of `{ method, path, id }`. `writeImportedRestMocks` writes it. The plugin reads it only when `matchParams` is on.
+
+The same functions are exported one by one (`routeKey`, `routeIndexKey`, `mockKey`, `streamKey`, `graphqlKey`, `mcpKey`, `grpcHotKey`, `grpcSchemaKey`). Each takes an optional prefix as its last argument. Omit it and the prefix is `mockmarlin`.
 
 ## `keys`
 
@@ -79,6 +78,7 @@ Optional `KeyLayout`. When set, `keyPrefix` is ignored and these functions are c
 ```ts
 interface KeyLayout {
   route(workspaceId: string, method: string, path: string): string;
+  routeIndex(workspaceId: string): string;
   mock(id: string): string;
   stream(workspaceId: string, path: string): string;
   graphql(workspaceId: string, path: string): string;
@@ -94,9 +94,7 @@ Use this when the colon-separated prefix is not the shape you store. A spread of
 
 ## `ttl`
 
-Optional. Used only in Redis mode. Memory mode ignores it and never expires a document.
-
-The plugin never writes documents. When a field is a positive finite number, a successful `GET` of that kind of key is followed by `EXPIRE key seconds`. The value is floored. `0`, negative numbers, and omitted fields do not call `EXPIRE`. A missing key is not given a TTL.
+Optional. The plugin never writes documents. When a field is a positive finite number, a successful `GET` of that kind of key is followed by `EXPIRE key seconds`. The value is floored. `0`, negative numbers, and omitted fields do not call `EXPIRE`. A missing key is not given a TTL.
 
 | Field | Key that is refreshed |
 |---|---|

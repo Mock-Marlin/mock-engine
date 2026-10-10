@@ -12,6 +12,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { graphqlKey, grpcHotKey, grpcSchemaKey, mcpKey, mockKey, routeKey, streamKey } from "../src/keys.js";
 import { createDispatcher } from "../src/router.js";
+import { toStore } from "../src/store.js";
 import { SessionManager } from "../src/mcp/SessionManager.js";
 import type { EngineSocket, InspectorLog } from "../src/index.js";
 import { createApp, listen, resolveWorkspaceId, WORKSPACE_ID, wsUpgrade } from "./support.js";
@@ -602,7 +603,7 @@ describe("sockets", () => {
         throw new Error("down");
       },
     } as unknown as Redis;
-    const failing = createDispatcher({ redis, resolveWorkspaceId, basePath: "/s" });
+    const failing = createDispatcher({ store: toStore(redis), resolveWorkspaceId, basePath: "/s" });
     const closed: Array<number | undefined> = [];
     const request = {
       params: { workspaceId: "acme", "*": "events" },
@@ -629,7 +630,7 @@ describe("sockets", () => {
 
     let terminated = false;
     const exploding = createDispatcher({
-      redis: { get: async () => { throw new Error("store"); } } as unknown as Redis,
+      store: toStore({ get: async () => { throw new Error("store"); } }),
       resolveWorkspaceId: async () => {
         throw new Error("lookup");
       },
@@ -652,7 +653,7 @@ describe("sockets", () => {
     expect(terminated).toBe(true);
 
     const mcp = createDispatcher({
-      redis: { get: async () => null } as unknown as Redis,
+      store: toStore({ get: async () => null }),
       resolveWorkspaceId,
     });
     const reasons: string[] = [];

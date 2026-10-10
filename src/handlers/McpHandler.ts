@@ -8,10 +8,10 @@ import type { IncomingMessage, OutgoingHttpHeaders } from "node:http";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
 import { resolveEngineConfig } from "../config.js";
-import { isRecord, redisGet } from "../http.js";
+import { isRecord, storeGet } from "../http.js";
+import type { MockStore } from "../store.js";
 import { dispatchJsonRpc, type McpInvocation } from "../mcp/jsonrpc.js";
 import { SessionManager } from "../mcp/SessionManager.js";
-import { openDocumentStore, type MockDocumentStore } from "../store.js";
 import type { MockEngineOptions, RequestContext } from "../types.js";
 
 const SSE_HEADERS = {
@@ -109,12 +109,10 @@ function holdStream(request: FastifyRequest, raw: FastifyReply["raw"]): void {
 
 export class McpHandler {
   private readonly options: MockEngineOptions;
-  private readonly store: MockDocumentStore;
   private readonly sessions = new SessionManager();
 
-  constructor(options: MockEngineOptions, store: MockDocumentStore = openDocumentStore(options)) {
+  constructor(options: MockEngineOptions) {
     this.options = options;
-    this.store = store;
   }
 
   async handle(
@@ -174,7 +172,7 @@ export class McpHandler {
 
   private async catalog(workspaceId: string, reply: FastifyReply): Promise<McpCatalog | null> {
     const settings = resolveEngineConfig(this.options);
-    const raw = await redisGet(this.store, settings.keys.mcp(workspaceId), reply, settings.ttl.mcp);
+    const raw = await storeGet(this.store, settings.keys.mcp(workspaceId), reply, settings.ttl.mcp);
     if (raw === "down") {
       return null;
     }
@@ -211,5 +209,9 @@ export class McpHandler {
       return tool["payload"];
     }
     return null;
+  }
+
+  private get store(): MockStore {
+    return this.options.store;
   }
 }

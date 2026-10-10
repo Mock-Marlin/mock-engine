@@ -12,7 +12,7 @@ import type { Redis } from "ioredis";
 import RedisMock from "ioredis-mock";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { mockEngine, mockEngineWebsocketOptions } from "../src/index.js";
+import { mockEngine, mockEngineWebsocketOptions, toStore } from "../src/index.js";
 
 const WORKSPACE_ID = "11111111-1111-4111-8111-111111111111";
 
@@ -22,6 +22,7 @@ function resolveWorkspaceId(slugOrId: string): Promise<string | null> {
 
 describe("mockEngine router", () => {
   const redis = new RedisMock() as unknown as Redis;
+  const store = toStore(redis);
   let app: FastifyInstance;
   let port = 0;
 
@@ -29,13 +30,13 @@ describe("mockEngine router", () => {
     app = Fastify();
     await app.register(websocket, {
       options: mockEngineWebsocketOptions({
-        redis,
+        store,
         resolveWorkspaceId,
         basePath: "/s",
       }),
     });
     await app.register(mockEngine, {
-      redis,
+      store,
       basePath: "/s",
       resolveWorkspaceId,
     });

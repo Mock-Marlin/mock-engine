@@ -1,12 +1,14 @@
 # Redis documents
 
-The plugin reads strings. Your app writes them, either with Redis `SET` or as the `data` map in memory mode. The key names and JSON values are the same in both modes. Names below use the default prefix. Swap in `createKeyLayout(prefix)` or your own `KeyLayout` if you changed it.
+The plugin reads strings from the store, in memory or in Redis. Your app writes them. Names below use the default prefix. Swap in `createKeyLayout(prefix)` or your own `KeyLayout` if you changed it.
 
 A missing key is a miss. Invalid JSON for a protocol that requires a document is also a miss, except MCP: a missing or broken catalog is an empty catalog (`tools`, `resources`, and `prompts` are `[]`).
 
 ## REST
 
 `route(workspaceId, METHOD, path)` stores the mock id as a plain string.
+
+`routeIndex(workspaceId)` stores a JSON array of `{ "method", "path", "id" }`. `writeImportedRestMocks` writes it. The plugin reads it only when `matchParams` is on, and only after the exact route key misses. A path segment that starts with `:` matches one request segment.
 
 `mock(id)` stores JSON:
 

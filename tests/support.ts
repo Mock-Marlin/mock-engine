@@ -11,9 +11,7 @@ import Fastify, { type FastifyInstance } from "fastify";
 import type { Redis } from "ioredis";
 import RedisMock from "ioredis-mock";
 
-import { mockEngine, mockEngineWebsocketOptions, type MockEngineOptions } from "../src/index.js";
-
-type RedisEngineOptions = Extract<MockEngineOptions, { mode?: "redis" }>;
+import { mockEngine, mockEngineWebsocketOptions, toStore, type MockEngineOptions, type MockStore } from "../src/index.js";
 
 export const WORKSPACE_ID = "11111111-1111-4111-8111-111111111111";
 
@@ -30,29 +28,33 @@ export function resolveWorkspaceId(slugOrId: string): Promise<string | null> {
 }
 
 export async function createApp(
-  extra: Partial<RedisEngineOptions> & { redis?: Redis } = {},
+  extra: Partial<Omit<MockEngineOptions, "store">> & { store?: MockStore; redis?: Redis } = {},
 ): Promise<{ app: FastifyInstance; redis: Redis }> {
-  const redis = extra.redis ?? createRedis();
-  const workspaceLookup = extra.resolveWorkspaceId ?? resolveWorkspaceId;
+  const { redis: redisOverride, store: explicitStore, ...rest } = extra;
+  const redis = redisOverride ?? createRedis();
+  const store = explicitStore ?? toStore(redis);
+  const workspaceLookup = rest.resolveWorkspaceId ?? resolveWorkspaceId;
+  const shared = {
+    store,
+    resolveWorkspaceId: workspaceLookup,
+    ...(rest.basePath !== undefined ? { basePath: rest.basePath } : {}),
+    ...(rest.keyPrefix !== undefined ? { keyPrefix: rest.keyPrefix } : {}),
+    ...(rest.keys !== undefined ? { keys: rest.keys } : {}),
+    ...(rest.ttl !== undefined ? { ttl: rest.ttl } : {}),
+    ...(rest.protocols !== undefined ? { protocols: rest.protocols } : {}),
+    ...(rest.matchParams === true ? { matchParams: true } : {}),
+  };
   const app = Fastify();
   await app.register(websocket, {
-    options: mockEngineWebsocketOptions({
-      redis,
-      resolveWorkspaceId: workspaceLookup,
-      ...(extra.basePath !== undefined ? { basePath: extra.basePath } : {}),
-      ...(extra.keyPrefix !== undefined ? { keyPrefix: extra.keyPrefix } : {}),
-      ...(extra.keys !== undefined ? { keys: extra.keys } : {}),
-      ...(extra.ttl !== undefined ? { ttl: extra.ttl } : {}),
-      ...(extra.protocols !== undefined ? { protocols: extra.protocols } : {}),
-    }),
+    options: mockEngineWebsocketOptions(shared),
   });
-  const pluginOptions: RedisEngineOptions = {
-    redis,
-    basePath: "/s",
-    resolveWorkspaceId: workspaceLookup,
-    ...extra,
-  };
-  await app.register(mockEngine, pluginOptions);
+  await app.register(mockEngine, {
+    ...shared,
+    basePath: rest.basePath ?? "/s",
+    ...(rest.resolvePayloadOverride !== undefined ? { resolvePayloadOverride: rest.resolvePayloadOverride } : {}),
+    ...(rest.onInspectorLog !== undefined ? { onInspectorLog: rest.onInspectorLog } : {}),
+    ...(rest.readStoredObject !== undefined ? { readStoredObject: rest.readStoredObject } : {}),
+  });
   await app.ready();
   return { app, redis };
 }

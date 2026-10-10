@@ -4,15 +4,14 @@
  * SPDX-License-Identifier: MIT
  */
 
-/** Default Redis namespace. Keys look like `mockmarlin:route:{workspaceId}:{METHOD}:{path}`. */
-export const DEFAULT_KEY_PREFIX = "mockmarlin";
+import { DEFAULT_KEY_PREFIX } from "./constants.js";
 
-/**
- * Functions that name every Redis key the engine reads for one workspace.
- * Pass the workspace id returned by `resolveWorkspaceId`.
- */
+export { DEFAULT_KEY_PREFIX } from "./constants.js";
+
+/** Names of the Redis keys the engine reads for one workspace. */
 export interface KeyLayout {
   route(workspaceId: string, method: string, path: string): string;
+  routeIndex(workspaceId: string): string;
   mock(id: string): string;
   stream(workspaceId: string, path: string): string;
   graphql(workspaceId: string, path: string): string;
@@ -21,15 +20,13 @@ export interface KeyLayout {
   grpcSchema(workspaceId: string): string;
 }
 
-/**
- * Build the default key layout under `prefix`.
- * A blank prefix uses {@link DEFAULT_KEY_PREFIX}. A trailing colon is removed.
- */
+/** Build key names under `prefix`. A blank prefix uses `DEFAULT_KEY_PREFIX`. */
 export function createKeyLayout(prefix?: string): KeyLayout {
   const root = normalizeKeyPrefix(prefix);
   const join = (...parts: string[]): string => [root, ...parts].join(":");
   return {
     route: (workspaceId, method, path) => join("route", workspaceId, method, path),
+    routeIndex: (workspaceId) => join("route-index", workspaceId),
     mock: (id) => join("mock", id),
     stream: (workspaceId, path) => join("stream", workspaceId, path),
     graphql: (workspaceId, path) => join("graphql", workspaceId, path),
@@ -43,6 +40,10 @@ const defaultKeys = createKeyLayout();
 
 export function routeKey(workspaceId: string, method: string, path: string, prefix?: string): string {
   return layoutFor(prefix).route(workspaceId, method, path);
+}
+
+export function routeIndexKey(workspaceId: string, prefix?: string): string {
+  return layoutFor(prefix).routeIndex(workspaceId);
 }
 
 export function mockKey(id: string, prefix?: string): string {

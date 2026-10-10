@@ -15,18 +15,43 @@ import type { EngineSocket, MockEngineOptions } from "./types.js";
 export { resolveEngineConfig } from "./config.js";
 export type { MockEngineSharedOptions, ResolvedEngineConfig } from "./config.js";
 export {
-  createKeyLayout,
+  DEFAULT_GRPC_PORT,
+  DEFAULT_HOST,
+  DEFAULT_HTTP_PORT,
   DEFAULT_KEY_PREFIX,
+  DEFAULT_WORKSPACE,
+} from "./constants.js";
+export {
+  createKeyLayout,
   graphqlKey,
   grpcHotKey,
   grpcSchemaKey,
   mcpKey,
   mockKey,
+  routeIndexKey,
   routeKey,
   streamKey,
 } from "./keys.js";
 export type { KeyLayout } from "./keys.js";
+export { seedExamples } from "./examples.js";
+export { parseHAR } from "./import/har.js";
+export { parseOpenAPI } from "./import/openapi.js";
+export { ImportParseError, parseImportFile } from "./import/parse-file.js";
+export type { ImportFormat } from "./import/parse-file.js";
+export { parsePostman } from "./import/postman.js";
+export type { HttpMethod, ImportedEndpoint, ImportedPayload } from "./import/types.js";
+export { clearWorkspace, prepareImportedEndpoints, writeImportedRestMocks } from "./import/write.js";
 export { mockEngineWebsocketOptions } from "./router.js";
+export { createMemoryStore, toStore } from "./store.js";
+export type { MockStore } from "./store.js";
+export { serve } from "./app/serve.js";
+export type { RunningServer, ServeOptions, StartupSource } from "./app/serve.js";
+export { SpecError } from "./spec.js";
+export type { MockSpec } from "./spec.js";
+export type { ServedMock } from "./app/catalog.js";
+export type { TrafficEvent } from "./app/screen.js";
+export { openRedisStore } from "./redis-store.js";
+export type { RedisStore } from "./redis-store.js";
 export type {
   EngineSocket,
   InspectorLog,
@@ -82,6 +107,7 @@ const mockEnginePlugin: FastifyPluginAsync<MockEngineOptions> = async (app, opti
   );
 };
 
+/** Fastify plugin that serves stored mocks under `basePath`. */
 export const mockEngine = fp(mockEnginePlugin, {
   name: "mock-engine",
   fastify: "5.x",

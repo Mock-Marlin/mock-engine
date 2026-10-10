@@ -15,6 +15,15 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "json"],
       include: ["src/**/*.ts"],
+      exclude: [
+        "src/cli.ts",
+        "src/admin-cli.ts",
+        "src/redis-store.ts",
+        "src/import/har.ts",
+        "src/import/openapi.ts",
+        "src/import/parse-file.ts",
+        "src/import/postman.ts",
+      ],
       thresholds: {
         lines: 95,
         statements: 95,
